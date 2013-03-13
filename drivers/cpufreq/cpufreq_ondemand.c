@@ -35,6 +35,10 @@
 #define MICRO_FREQUENCY_MIN_SAMPLE_RATE		(10000)
 #define MIN_FREQUENCY_UP_THRESHOLD		(11)
 #define MAX_FREQUENCY_UP_THRESHOLD		(100)
+#define DEFAULT_FREQ_BOOST_TIME			(500000)
+#define MAX_FREQ_BOOST_TIME				(5000000)
+
+u64 freq_boosted_time;
 
 /*
  * The polling frequency of this governor depends on the capability of
@@ -110,11 +114,16 @@ static struct dbs_tuners {
 	unsigned int ignore_nice;
 	unsigned int powersave_bias;
 	unsigned int io_is_busy;
+	unsigned int boosted;
+	unsigned int freq_boost_time;
+	unsigned int boostfreq;
 } dbs_tuners_ins = {
 	.up_threshold = DEF_FREQUENCY_UP_THRESHOLD,
 	.down_differential = DEF_FREQUENCY_DOWN_DIFFERENTIAL,
 	.ignore_nice = 0,
 	.powersave_bias = 0,
+	.freq_boost_time = DEFAULT_FREQ_BOOST_TIME,
+	.boostfreq = 0,
 };
 
 static inline cputime64_t get_cpu_idle_time_jiffy(unsigned int cpu,
@@ -261,6 +270,9 @@ show_one(io_is_busy, io_is_busy);
 show_one(up_threshold, up_threshold);
 show_one(ignore_nice_load, ignore_nice);
 show_one(powersave_bias, powersave_bias);
+show_one(boostpulse, boosted);
+show_one(boosttime, freq_boost_time);
+show_one(boostfreq, boostfreq);
 
 /*** delete after deprecation time ***/
 
@@ -398,11 +410,46 @@ static ssize_t store_powersave_bias(struct kobject *a, struct attribute *b,
 	return count;
 }
 
+
+static ssize_t store_boostpulse(struct kobject *kobj, struct attribute *attr,
+				const char *buf, size_t count)
+{
+	int ret;
+	unsigned int input;
+
+	ret = sscanf(buf, "%u", &input);
+	if (ret < 0)
+		return ret;
+
+	if (input > 1 && input <= MAX_FREQ_BOOST_TIME)
+		dbs_tuners_ins.freq_boost_time = input;
+	else
+		dbs_tuners_ins.freq_boost_time = DEFAULT_FREQ_BOOST_TIME;
+
+	dbs_tuners_ins.boosted = 1;
+	freq_boosted_time = ktime_to_us(ktime_get());
+	return count;
+}
+
+static ssize_t store_boostfreq(struct kobject *a, struct attribute *b,
+				   const char *buf, size_t count)
+{
+	unsigned int input;
+	int ret;
+	ret = sscanf(buf, "%u", &input);
+	if (ret != 1)
+		return -EINVAL;
+	dbs_tuners_ins.boostfreq = input;
+	return count;
+}
+
 define_one_global_rw(sampling_rate);
 define_one_global_rw(io_is_busy);
 define_one_global_rw(up_threshold);
 define_one_global_rw(ignore_nice_load);
 define_one_global_rw(powersave_bias);
+define_one_global_rw(boostpulse);
+define_one_global_rw(boostfreq);
 
 static struct attribute *dbs_attributes[] = {
 	&sampling_rate_max.attr,
@@ -412,6 +459,8 @@ static struct attribute *dbs_attributes[] = {
 	&ignore_nice_load.attr,
 	&powersave_bias.attr,
 	&io_is_busy.attr,
+	&boostpulse.attr,
+	&boostfreq.attr,
 	NULL
 };
 
@@ -459,16 +508,38 @@ static struct attribute_group dbs_attr_group_old = {
 
 /************************** sysfs end ************************/
 
+static void dbs_freq_increase(struct cpufreq_policy *p, unsigned int freq)
+{
+	if (dbs_tuners_ins.powersave_bias)
+		freq = powersave_bias_target(p, freq, CPUFREQ_RELATION_H);
+	else if (p->cur == p->max)
+		return;
+
+	__cpufreq_driver_target(p, freq, dbs_tuners_ins.powersave_bias ?
+			CPUFREQ_RELATION_L : CPUFREQ_RELATION_H);
+}
+
 static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 {
 	unsigned int max_load_freq;
 
 	struct cpufreq_policy *policy;
 	unsigned int j;
+	unsigned int boostfreq;
 
 	this_dbs_info->freq_lo = 0;
 	policy = this_dbs_info->cur_policy;
-
+	/* Only core0 controls the boost */
+	if (dbs_tuners_ins.boosted && policy->cpu == 0) {
+		if (ktime_to_us(ktime_get()) - freq_boosted_time >=
+					dbs_tuners_ins.freq_boost_time) {
+			dbs_tuners_ins.boosted = 0;
+		}
+	}
+	if (dbs_tuners_ins.boostfreq != 0)
+		boostfreq = dbs_tuners_ins.boostfreq;
+	else
+		boostfreq = policy->max;
 	/*
 	 * Every sampling_rate, we check, if current idle time is less
 	 * than 20% (default), then we try to increase frequency
@@ -551,19 +622,13 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 
 	/* Check for frequency increase */
 	if (max_load_freq > dbs_tuners_ins.up_threshold * policy->cur) {
-		/* if we are already at full speed then break out early */
-		if (!dbs_tuners_ins.powersave_bias) {
-			if (policy->cur == policy->max)
-				return;
+		dbs_freq_increase(policy, policy->max);
+		return;
+	}
 
-			__cpufreq_driver_target(policy, policy->max,
-				CPUFREQ_RELATION_H);
-		} else {
-			int freq = powersave_bias_target(policy, policy->max,
-					CPUFREQ_RELATION_H);
-			__cpufreq_driver_target(policy, freq,
-				CPUFREQ_RELATION_L);
-		}
+	/* check for frequency boost */
+	if (dbs_tuners_ins.boosted && policy->cur < boostfreq) {
+		dbs_freq_increase(policy, boostfreq);
 		return;
 	}
 
@@ -584,6 +649,11 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		freq_next = max_load_freq /
 				(dbs_tuners_ins.up_threshold -
 				 dbs_tuners_ins.down_differential);
+
+		if (dbs_tuners_ins.boosted &&
+				freq_next < boostfreq) {
+			freq_next = boostfreq;
+		}
 
 		if (freq_next < policy->min)
 			freq_next = policy->min;

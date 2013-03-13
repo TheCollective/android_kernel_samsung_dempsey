@@ -502,6 +502,9 @@ struct hid_device {							/* device report descriptor */
 				  struct hid_usage *, __s32);
 	void (*hiddev_report_event) (struct hid_device *, struct hid_report *);
 
+	/* handler for raw input (Get_Report) data, used by hidraw */
+	int (*hid_get_raw_report) (struct hid_device *, unsigned char, __u8 *, size_t, unsigned char);
+
 	/* handler for raw output data, used by hidraw */
 	int (*hid_output_raw_report) (struct hid_device *, __u8 *, size_t, unsigned char);
 
@@ -835,6 +838,11 @@ int hid_pidff_init(struct hid_device *hid);
 #else
 #define hid_pidff_init NULL
 #endif
+
+#define hid_err(hid, fmt, arg...)			\
+	dev_err(&(hid)->dev, fmt, ##arg)
+#define hid_warn(hid, fmt, arg...)			\
+	dev_warn(&(hid)->dev, fmt, ##arg)
 
 #define dbg_hid(format, arg...) if (hid_debug) \
 				printk(KERN_DEBUG "%s: " format ,\

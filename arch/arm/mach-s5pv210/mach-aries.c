@@ -89,9 +89,9 @@
 
 #ifdef CONFIG_ANDROID_PMEM
 #include <linux/android_pmem.h>
+#endif
 #include <plat/media.h>
 #include <mach/media.h>
-#endif
 
 #ifdef CONFIG_S5PV210_POWER_DOMAIN
 #include <mach/power-domain.h>
@@ -353,10 +353,13 @@ static struct s3c2410_uartcfg aries_uartcfgs[] __initdata = {
 	},
 };
 
+#define S5PV210_LCD_WIDTH 480
+#define S5PV210_LCD_HEIGHT 800
+
 #if defined (CONFIG_S5PC110_HAWK_BOARD) /* nat */
 static struct s3cfb_lcd s6e63m0 = {
-	.width = 480,
-	.height = 800,
+	.width = S5PV210_LCD_WIDTH,
+	.height = S5PV210_LCD_HEIGHT,
 	.p_width = 52,
 	.p_height = 86,
 	.bpp = 24,
@@ -408,49 +411,23 @@ static struct s3cfb_lcd s6e63m0 = {
 };
 #endif
 
-#if 0
-#define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_FIMC0 (14745 * SZ_1K)
-#define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_FIMC1 (9900 * SZ_1K)
-#define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_FIMC2 (14745 * SZ_1K)
-#define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_MFC0 (32768 * SZ_1K)
-#define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_MFC1 (32768 * SZ_1K)
-#define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_FIMD (4800 * SZ_1K)
-#define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_JPEG (8192 * SZ_1K)
-#define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_PMEM (8192 * SZ_1K)
-#define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_GPU1 (3300 * SZ_1K)
-#define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_ADSP (6144 * SZ_1K)
-#define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_TEXTSTREAM (3000 * SZ_1K)
-#else	// optimized settings, 19th Jan.2011
 #define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_FIMC0 (12288 * SZ_1K)
 //#define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_FIMC1 (9900 * SZ_1K)
 #define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_FIMC2 (12288 * SZ_1K)
-#if !defined(CONFIG_ARIES_NTT)   
-#if  defined(CONFIG_S5PC110_DEMPSEY_BOARD)/* Dempsey - support playing 1080p */	
-#define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_MFC0 (36864 * SZ_1K)
-#define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_MFC1 (36864 * SZ_1K)
-#else
-#define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_MFC0 (32768 * SZ_1K)
-#define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_MFC1 (32768 * SZ_1K)
-#endif
-#else    /* NTT - support playing 1080p */
-#define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_MFC0 (36864 * SZ_1K)
-#define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_MFC1 (36864 * SZ_1K)
-#endif
-#define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_FIMD (480 * 800 * 4 * \
+#define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_MFC0 (14336 * SZ_1K)
+#define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_MFC1 (21504 * SZ_1K)
+#define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_FIMD (S5PV210_LCD_WIDTH * \
+					S5PV210_LCD_HEIGHT * 4 * \
 					(CONFIG_FB_S3C_NR_BUFFERS + \
 					(CONFIG_FB_S3C_NUM_OVLY_WIN * \
 					CONFIG_FB_S3C_NUM_BUF_OVLY_WIN)))
-#if defined(CONFIG_S5PC110_DEMPSEY_BOARD)
-#define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_JPEG (8312 * SZ_1K)
-#else
-#define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_JPEG (5012 * SZ_1K)
-#endif
+#define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_JPEG (4096 * SZ_1K)
+#ifdef CONFIG_ANDROID_PMEM
 #define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_PMEM (5550 * SZ_1K)
-#define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_GPU1 (3300 * SZ_1K)
-#define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_ADSP (1500 * SZ_1K)
+#define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_PMEM_GPU1 (3300 * SZ_1K)
+#define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_PMEM_ADSP (1500 * SZ_1K)
 #define  S5PV210_VIDEO_SAMSUNG_MEMSIZE_TEXTSTREAM (3000 * SZ_1K)
 #endif
-
 
 static struct s5p_media_device aries_media_devs[] = {
 	[0] = {
@@ -504,6 +481,7 @@ static struct s5p_media_device aries_media_devs[] = {
 		.memsize = S5PV210_VIDEO_SAMSUNG_MEMSIZE_FIMD,
 		.paddr = 0,
 	},
+#ifdef CONFIG_ANDROID_PMEM
 	[7] = {
 		.id = S5P_MDEV_PMEM,
 		.name = "pmem",
@@ -515,14 +493,14 @@ static struct s5p_media_device aries_media_devs[] = {
 		.id = S5P_MDEV_PMEM_GPU1,
 		.name = "pmem_gpu1",
 		.bank = 0,
-		.memsize = S5PV210_VIDEO_SAMSUNG_MEMSIZE_GPU1,
+		.memsize = S5PV210_VIDEO_SAMSUNG_MEMSIZE_PMEM_GPU1,
 		.paddr = 0,
 	},	
 	[9] = {
 		.id = S5P_MDEV_PMEM_ADSP,
 		.name = "pmem_adsp",
 		.bank = 0,
-		.memsize = S5PV210_VIDEO_SAMSUNG_MEMSIZE_ADSP,
+		.memsize = S5PV210_VIDEO_SAMSUNG_MEMSIZE_PMEM_ADSP,
 		.paddr = 0,
 	},		
 	[10] = {
@@ -532,6 +510,7 @@ static struct s5p_media_device aries_media_devs[] = {
 		.memsize = S5PV210_VIDEO_SAMSUNG_MEMSIZE_TEXTSTREAM,
 		.paddr = 0,
 	},		
+#endif
 };
 
 static struct regulator_consumer_supply ldo3_consumer[] = {
@@ -561,7 +540,6 @@ static struct regulator_consumer_supply ldo7_consumer[] = {
 
 static struct regulator_consumer_supply ldo8_consumer[] = {
 	REGULATOR_SUPPLY("usb_core", NULL),
-	REGULATOR_SUPPLY("tvout", NULL),
 };
 
 //#if defined(CONFIG_VIDEO_S5K5CCGX) || defined(CONFIG_VIDEO_SR030PC30)
@@ -5322,8 +5300,6 @@ static int m5mo_power_down()
 extern unsigned int ldo3_status;
 extern unsigned int ldo8_status; //Subhransu20110304
 
-extern void __s5p_hdmi_phy_power_offtest(void); //Subhransu20110304
-
 
 //Subhransu20110304
 void ldo8_control_and_hdmi_phyoff_test()
@@ -5332,16 +5308,13 @@ void ldo8_control_and_hdmi_phyoff_test()
 	printk(KERN_ERR "[%s]: ldo8_status = %d\n", __func__, ldo8_status);
 	Set_MAX8998_PM_REG(ELDO8, 1 );
 	ldo8_status = 1;
-	__s5p_hdmi_phy_power_offtest();
 #endif
 	return 0;
 }
 
 
 extern int tv_power_status; 
-#ifdef CONFIG_S5PC110_DEMPSEY_BOARD
-extern void __s5p_hdmi_phy_power_offtest();
-#endif
+
 static struct regulator *cam_mipi_c_regulator;
 static struct regulator *cam_mipi_regulator;
 void s3c_csis_power(int enable)
@@ -5387,7 +5360,6 @@ int err;
 				pr_err("Failed to enable usb_core during cam \n");
 				}
 		
-		__s5p_hdmi_phy_power_offtest();
 #endif
 
 	}
@@ -7192,7 +7164,7 @@ static int wlan_power_en(int onoff)
 		s3c_gpio_slp_setpull_updown(GPIO_WLAN_BT_EN,
 					S3C_GPIO_PULL_NONE);
 
-		msleep(80);
+		msleep(200);
 	} else {
 		gpio_set_value(GPIO_WLAN_nRST, GPIO_LEVEL_LOW);
 		s3c_gpio_slp_cfgpin(GPIO_WLAN_nRST, S3C_GPIO_SLP_OUT0);
@@ -7249,6 +7221,7 @@ static int wlan_carddetect_en(int onoff)
 #else
 	sdhci_s3c_force_presence_change(&s3c_device_hsmmc3);
 #endif
+	msleep(500); /* wait for carddetect */
 	return 0;
 }
 
@@ -7503,9 +7476,7 @@ static struct platform_device *aries_devices[] __initdata = {
 	&s3c_device_hsmmc3,
 #endif
 #endif
-#ifdef CONFIG_VIDEO_TV20
-        &s5p_device_tvout,
-#endif
+
 	&sec_device_battery,
 	&s3c_device_i2c10,
 
