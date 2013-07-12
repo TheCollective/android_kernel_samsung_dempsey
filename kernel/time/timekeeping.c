@@ -32,6 +32,8 @@ struct timekeeper {
 	cycle_t cycle_interval;
 	/* Number of clock shifted nano seconds in one NTP interval. */
 	u64	xtime_interval;
+	/* shifted nano seconds left over when rounding cycle_interval */
+	s64  xtime_remainder;
 	/* Raw nano seconds accumulated per NTP interval. */
 	u32	raw_interval;
 
@@ -62,7 +64,7 @@ struct timekeeper timekeeper;
 static void timekeeper_setup_internals(struct clocksource *clock)
 {
 	cycle_t interval;
-	u64 tmp;
+	u64 tmp, ntpinterval;
 
 	timekeeper.clock = clock;
 	clock->cycle_last = clock->read(clock);
@@ -70,7 +72,9 @@ static void timekeeper_setup_internals(struct clocksource *clock)
 	/* Do the ns -> cycle conversion first, using original mult */
 	tmp = NTP_INTERVAL_LENGTH;
 	tmp <<= clock->shift;
+	ntpinterval = tmp;
 	tmp += clock->mult/2;
+	ntpinterval = tmp;
 	do_div(tmp, clock->mult);
 	if (tmp == 0)
 		tmp = 1;
@@ -80,6 +84,7 @@ static void timekeeper_setup_internals(struct clocksource *clock)
 
 	/* Go back from cycles -> shifted ns */
 	timekeeper.xtime_interval = (u64) interval * clock->mult;
+	timekeeper.xtime_remainder = ntpinterval - timekeeper.xtime_interval;
 	timekeeper.raw_interval =
 		((u64) interval * clock->mult) >> clock->shift;
 
@@ -765,8 +770,9 @@ static cycle_t logarithmic_accumulation(cycle_t offset, int shift)
 
 	/* Accumulate error between NTP and clock interval */
 	timekeeper.ntp_error += tick_length << shift;
-	timekeeper.ntp_error -= timekeeper.xtime_interval <<
-				(timekeeper.ntp_error_shift + shift);
+	timekeeper.ntp_error -= 
+		(timekeeper.xtime_interval + timekeeper.xtime_remainder) <<
+      			(timekeeper.ntp_error_shift + shift);
 
 	return offset;
 }
@@ -884,6 +890,54 @@ void getboottime(struct timespec *ts)
 	set_normalized_timespec(ts, -boottime.tv_sec, -boottime.tv_nsec);
 }
 EXPORT_SYMBOL_GPL(getboottime);
+
+/**
+ * get_monotonic_boottime - Returns monotonic time since boot
+ * @ts:    pointer to the timespec to be set
+ *
+ * Returns the monotonic time since boot in a timespec.
+ *
+ * This is similar to CLOCK_MONTONIC/ktime_get_ts, but also
+ * includes the time spent in suspend.
+ */
+void get_monotonic_boottime(struct timespec *ts)
+{
+  struct timespec tomono, sleep;
+  unsigned int seq;
+  s64 nsecs;
+
+  WARN_ON(timekeeping_suspended);
+
+  do {
+    seq = read_seqbegin(&xtime_lock);
+    *ts = xtime;
+    tomono = wall_to_monotonic;
+    sleep = total_sleep_time;
+    nsecs = timekeeping_get_ns();
+
+  } while (read_seqretry(&xtime_lock, seq));
+
+  set_normalized_timespec(ts, ts->tv_sec + tomono.tv_sec + sleep.tv_sec,
+      ts->tv_nsec + tomono.tv_nsec + sleep.tv_nsec + nsecs);
+}
+EXPORT_SYMBOL_GPL(get_monotonic_boottime);
+
+/**
+ * ktime_get_boottime - Returns monotonic time since boot in a ktime
+ *
+ * Returns the monotonic time since boot in a ktime
+ *
+ * This is similar to CLOCK_MONTONIC/ktime_get, but also
+ * includes the time spent in suspend.
+ */
+ktime_t ktime_get_boottime(void)
+{
+  struct timespec ts;
+
+  get_monotonic_boottime(&ts);
+  return timespec_to_ktime(ts);
+}
+EXPORT_SYMBOL_GPL(ktime_get_boottime);
 
 /**
  * monotonic_to_bootbased - Convert the monotonic time to boot based.

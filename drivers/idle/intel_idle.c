@@ -230,9 +230,6 @@ static int intel_idle(struct cpuidle_device *dev, struct cpuidle_state *state)
 	kt_before = ktime_get_real();
 
 	stop_critical_timings();
-#ifndef MODULE
-	trace_power_start(POWER_CSTATE, (eax >> 4) + 1);
-#endif
 	if (!need_resched()) {
 
 		__monitor((void *)&current_thread_info()->flags, 0, 0);
@@ -308,7 +305,7 @@ static int intel_idle_probe(void)
 		break;
 
 	case 0x1C:	/* 28 - Atom Processor */
-		lapic_timer_reliable_states = (1 << 2) | (1 << 1); /* C2, C1 */
+		lapic_timer_reliable_states = (1 << 1); /* C1 */
 		cpuidle_state_table = atom_cstates;
 		choose_substate = choose_zero_substate;
 		break;

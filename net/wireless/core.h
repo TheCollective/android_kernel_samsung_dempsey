@@ -54,6 +54,8 @@ struct cfg80211_registered_device {
 	int opencount; /* also protected by devlist_mtx */
 	wait_queue_head_t dev_wait;
 
+	u32 ap_beacons_nlpid; 
+
 	/* BSSes/scanning */
 	spinlock_t bss_lock;
 	struct list_head bss_list;
@@ -69,6 +71,8 @@ struct cfg80211_registered_device {
 
 	struct work_struct conn_work;
 	struct work_struct event_work;
+
+	struct cfg80211_wowlan *wowlan;
 
 	/* must be last because of the way we do wiphy_priv(),
 	 * and it should at least be aligned to NETDEV_ALIGN */
@@ -89,6 +93,18 @@ bool wiphy_idx_valid(int wiphy_idx)
 	return wiphy_idx >= 0;
 }
 
+static inline void
+cfg80211_rdev_free_wowlan(struct cfg80211_registered_device *rdev)
+{
+	int i;
+
+	if (!rdev->wowlan)
+		return;
+	for (i = 0; i < rdev->wowlan->n_patterns; i++)
+		kfree(rdev->wowlan->patterns[i].mask);
+	kfree(rdev->wowlan->patterns);
+	kfree(rdev->wowlan);
+}
 
 extern struct workqueue_struct *cfg80211_wq;
 extern struct mutex cfg80211_mutex;
@@ -402,6 +418,7 @@ int cfg80211_change_iface(struct cfg80211_registered_device *rdev,
 			  struct net_device *dev, enum nl80211_iftype ntype,
 			  u32 *flags, struct vif_params *params);
 void cfg80211_process_rdev_events(struct cfg80211_registered_device *rdev);
+void cfg80211_process_wdev_events(struct wireless_dev *wdev);
 
 struct ieee80211_channel *
 rdev_freq_to_chan(struct cfg80211_registered_device *rdev,

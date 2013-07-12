@@ -47,7 +47,7 @@ atomic_t wakelock_refs = ATOMIC_INIT(0);
  * performance cost, and for other reasons may not always be desired.
  * So we allow it it to be disabled.
  */
-int use_spi_crc = 1;
+int use_spi_crc = 0;
 module_param(use_spi_crc, bool, 0);
 
 /*
@@ -1508,6 +1508,7 @@ int mmc_pm_notify(struct notifier_block *notify_block,
 
 	case PM_POST_SUSPEND:
 	case PM_POST_HIBERNATION:
+	case PM_POST_RESTORE:
 
 		spin_lock_irqsave(&host->lock, flags);
 		if (mmc_bus_manual_resume(host)) {

@@ -403,6 +403,23 @@
  * @NL80211_CMD_LEAVE_MESH: Leave the mesh network -- no special arguments, the
  *	network is determined by the network interface.
  *
+ * @NL80211_CMD_GET_WOWLAN: get Wake-on-Wireless-LAN (WoWLAN) settings.
+ * @NL80211_CMD_SET_WOWLAN: set Wake-on-Wireless-LAN (WoWLAN) settings.
+ *	Since wireless is more complex than wired ethernet, it supports
+ *	various triggers. These triggers can be configured through this
+ *	command with the %NL80211_ATTR_WOWLAN_TRIGGERS attribute. For
+ *	more background information, see
+ *	http://wireless.kernel.org/en/users/Documentation/WoWLAN.
+ *
+ *
+ * @NL80211_CMD_SET_REKEY_OFFLOAD: This command is used give the driver
+ * the necessary information for supporting GTK rekey offload. This
+ * feature is typically used during WoWLAN. The configuration data
+ * is contained in %NL80211_ATTR_REKEY_DATA (which is nested and
+ * contains the data in sub-attributes). After rekeying happened,
+ * this command may also be sent by the driver as an MLME event to
+ * inform userspace of the new replay counter.
+ *
  * @NL80211_CMD_UNPROT_DEAUTHENTICATE: Unprotected deauthentication frame
  *	notification. This event is used to indicate that an unprotected
  *	deauthentication frame was dropped when MFP is in use.
@@ -521,6 +538,35 @@ enum nl80211_commands {
 
 	NL80211_CMD_UNPROT_DEAUTHENTICATE,
 	NL80211_CMD_UNPROT_DISASSOCIATE,
+
+	NL80211_CMD_GET_WOWLAN,
+	NL80211_CMD_SET_WOWLAN,
+
+	NL80211_ATTR_HIDDEN_SSID,
+
+  	NL80211_ATTR_IE_PROBE_RESP,
+  	NL80211_ATTR_IE_ASSOC_RESP,
+
+  	NL80211_ATTR_STA_WME,
+  	NL80211_ATTR_SUPPORT_AP_UAPSD,
+
+  	NL80211_ATTR_ROAM_SUPPORT,
+
+  	NL80211_ATTR_SCHED_SCAN_MATCH,
+  	NL80211_ATTR_MAX_MATCH_SETS,
+
+	NL80211_CMD_UNEXPECTED_FRAME,
+
+	NL80211_CMD_PROBE_CLIENT,
+
+	NL80211_CMD_REGISTER_BEACONS,
+
+	NL80211_CMD_PMKSA_CANDIDATE,
+
+	NL80211_CMD_TDLS_OPER,
+  	NL80211_CMD_TDLS_MGMT,
+
+	NL80211_CMD_SET_REKEY_OFFLOAD,
 
 	/* add new commands above here */
 
@@ -887,6 +933,15 @@ enum nl80211_commands {
  * @NL80211_ATTR_MESH_CONFIG: Mesh configuration parameters, a nested attribute
  *	containing attributes from &enum nl80211_meshconf_params.
  *
+ * @NL80211_ATTR_WOWLAN_TRIGGERS_SUPPORTED: indicates, as part of the wiphy
+ *	capabilities, the supported WoWLAN triggers
+ * @NL80211_ATTR_WOWLAN_TRIGGERS: used by %NL80211_CMD_SET_WOWLAN to
+ *	indicate which WoW triggers should be enabled. This is also
+ *	used by %NL80211_CMD_GET_WOWLAN to get the currently enabled WoWLAN
+ *	triggers.
+ *
+ * @%NL80211_ATTR_REKEY_DATA: nested attribute containing the information
+ * necessary for GTK rekeying in the device, see &enum nl80211_rekey_data.
  * @NL80211_ATTR_MAX: highest attribute number currently defined
  * @__NL80211_ATTR_AFTER_LAST: internal use
  */
@@ -1073,6 +1128,23 @@ enum nl80211_attrs {
 
 	NL80211_ATTR_WIPHY_ANTENNA_AVAIL_TX,
 	NL80211_ATTR_WIPHY_ANTENNA_AVAIL_RX,
+
+	NL80211_ATTR_WOWLAN_TRIGGERS,
+	NL80211_ATTR_WOWLAN_TRIGGERS_SUPPORTED,
+
+	NL80211_ATTR_REKEY_DATA,
+
+	NL80211_ATTR_PMKSA_CANDIDATE,
+
+	NL80211_ATTR_DEVICE_AP_SME,
+
+	NL80211_ATTR_TX_NO_CCK_RATE,
+
+	NL80211_ATTR_TDLS_ACTION,
+	NL80211_ATTR_TDLS_DIALOG_TOKEN,
+	NL80211_ATTR_TDLS_OPERATION,
+	NL80211_ATTR_TDLS_SUPPORT,
+  	NL80211_ATTR_TDLS_EXTERNAL_SETUP,
 
 	/* add attributes here, update the policy in nl80211.c */
 
@@ -1490,6 +1562,26 @@ enum nl80211_reg_rule_attr {
 	/* keep last */
 	__NL80211_REG_RULE_ATTR_AFTER_LAST,
 	NL80211_REG_RULE_ATTR_MAX = __NL80211_REG_RULE_ATTR_AFTER_LAST - 1
+};
+
+/**
+ * enum nl80211_sched_scan_match_attr - scheduled scan match attributes
+ * @__NL80211_SCHED_SCAN_MATCH_ATTR_INVALID: attribute number 0 is reserved
+ * @NL80211_SCHED_SCAN_MATCH_ATTR_SSID: SSID to be used for matching,
+ * only report BSS with matching SSID.
+ * @NL80211_SCHED_SCAN_MATCH_ATTR_MAX: highest scheduled scan filter
+ *  attribute number currently defined
+ * @__NL80211_SCHED_SCAN_MATCH_ATTR_AFTER_LAST: internal use
+ */
+enum nl80211_sched_scan_match_attr {
+  __NL80211_SCHED_SCAN_MATCH_ATTR_INVALID,
+
+  NL80211_ATTR_SCHED_SCAN_MATCH_SSID,
+
+  /* keep last */
+  __NL80211_SCHED_SCAN_MATCH_ATTR_AFTER_LAST,
+  NL80211_SCHED_SCAN_MATCH_ATTR_MAX =
+    __NL80211_SCHED_SCAN_MATCH_ATTR_AFTER_LAST - 1
 };
 
 /**
@@ -2001,5 +2093,204 @@ enum nl80211_tx_power_setting {
 	NL80211_TX_POWER_LIMITED,
 	NL80211_TX_POWER_FIXED,
 };
+
+/**
+ * enum nl80211_wowlan_packet_pattern_attr - WoWLAN packet pattern attribute
+ * @__NL80211_WOWLAN_PKTPAT_INVALID: invalid number for nested attribute
+ * @NL80211_WOWLAN_PKTPAT_PATTERN: the pattern, values where the mask has
+ *	a zero bit are ignored
+ * @NL80211_WOWLAN_PKTPAT_MASK: pattern mask, must be long enough to have
+ *	a bit for each byte in the pattern. The lowest-order bit corresponds
+ *	to the first byte of the pattern, but the bytes of the pattern are
+ *	in a little-endian-like format, i.e. the 9th byte of the pattern
+ *	corresponds to the lowest-order bit in the second byte of the mask.
+ *	For example: The match 00:xx:00:00:xx:00:00:00:00:xx:xx:xx (where
+ *	xx indicates "don't care") would be represented by a pattern of
+ *	twelve zero bytes, and a mask of "0xed,0x07".
+ *	Note that the pattern matching is done as though frames were not
+ *	802.11 frames but 802.3 frames, i.e. the frame is fully unpacked
+ *	first (including SNAP header unpacking) and then matched.
+ * @NUM_NL80211_WOWLAN_PKTPAT: number of attributes
+ * @MAX_NL80211_WOWLAN_PKTPAT: max attribute number
+ */
+enum nl80211_wowlan_packet_pattern_attr {
+	__NL80211_WOWLAN_PKTPAT_INVALID,
+	NL80211_WOWLAN_PKTPAT_MASK,
+	NL80211_WOWLAN_PKTPAT_PATTERN,
+
+	NUM_NL80211_WOWLAN_PKTPAT,
+	MAX_NL80211_WOWLAN_PKTPAT = NUM_NL80211_WOWLAN_PKTPAT - 1,
+};
+
+/**
+ * struct nl80211_wowlan_pattern_support - pattern support information
+ * @max_patterns: maximum number of patterns supported
+ * @min_pattern_len: minimum length of each pattern
+ * @max_pattern_len: maximum length of each pattern
+ *
+ * This struct is carried in %NL80211_WOWLAN_TRIG_PKT_PATTERN when
+ * that is part of %NL80211_ATTR_WOWLAN_TRIGGERS_SUPPORTED in the
+ * capability information given by the kernel to userspace.
+ */
+struct nl80211_wowlan_pattern_support {
+	__u32 max_patterns;
+	__u32 min_pattern_len;
+	__u32 max_pattern_len;
+} __attribute__((packed));
+
+/**
+ * enum nl80211_wowlan_triggers - WoWLAN trigger definitions
+ * @__NL80211_WOWLAN_TRIG_INVALID: invalid number for nested attributes
+ * @NL80211_WOWLAN_TRIG_ANY: wake up on any activity, do not really put
+ *	the chip into a special state -- works best with chips that have
+ *	support for low-power operation already (flag)
+ * @NL80211_WOWLAN_TRIG_DISCONNECT: wake up on disconnect, the way disconnect
+ *	is detected is implementation-specific (flag)
+ * @NL80211_WOWLAN_TRIG_MAGIC_PKT: wake up on magic packet (6x 0xff, followed
+ *	by 16 repetitions of MAC addr, anywhere in payload) (flag)
+ * @NL80211_WOWLAN_TRIG_PKT_PATTERN: wake up on the specified packet patterns
+ *	which are passed in an array of nested attributes, each nested attribute
+ *	defining a with attributes from &struct nl80211_wowlan_trig_pkt_pattern.
+ *	Each pattern defines a wakeup packet. The matching is done on the MSDU,
+ *	i.e. as though the packet was an 802.3 packet, so the pattern matching
+ *	is done after the packet is converted to the MSDU.
+ *
+ *	In %NL80211_ATTR_WOWLAN_TRIGGERS_SUPPORTED, it is a binary attribute
+ *	carrying a &struct nl80211_wowlan_pattern_support.
+ * @NL80211_WOWLAN_TRIG_GTK_REKEY_SUPPORTED: Not a real trigger, and cannot be
+ *	used when setting, used only to indicate that GTK rekeying is supported
+ *	by the device (flag)
+ * @NL80211_WOWLAN_TRIG_GTK_REKEY_FAILURE: wake up on GTK rekey failure (if
+ *	done by the device) (flag)
+ * @NL80211_WOWLAN_TRIG_EAP_IDENT_REQUEST: wake up on EAP Identity Request
+ *	packet (flag)
+ * @NL80211_WOWLAN_TRIG_4WAY_HANDSHAKE: wake up on 4-way handshake (flag)
+ * @NL80211_WOWLAN_TRIG_RFKILL_RELEASE: wake up when rfkill is released
+ *	(on devices that have rfkill in the device) (flag)
+ * @NUM_NL80211_WOWLAN_TRIG: number of wake on wireless triggers
+ * @MAX_NL80211_WOWLAN_TRIG: highest wowlan trigger attribute number
+ */
+enum nl80211_wowlan_triggers {
+	__NL80211_WOWLAN_TRIG_INVALID,
+	NL80211_WOWLAN_TRIG_ANY,
+	NL80211_WOWLAN_TRIG_DISCONNECT,
+	NL80211_WOWLAN_TRIG_MAGIC_PKT,
+	NL80211_WOWLAN_TRIG_PKT_PATTERN,
+	NL80211_WOWLAN_TRIG_GTK_REKEY_SUPPORTED,
+	NL80211_WOWLAN_TRIG_GTK_REKEY_FAILURE,
+	NL80211_WOWLAN_TRIG_EAP_IDENT_REQUEST,
+	NL80211_WOWLAN_TRIG_4WAY_HANDSHAKE,
+	NL80211_WOWLAN_TRIG_RFKILL_RELEASE,
+
+	/* keep last */
+	NUM_NL80211_WOWLAN_TRIG,
+	MAX_NL80211_WOWLAN_TRIG = NUM_NL80211_WOWLAN_TRIG - 1
+};
+
+#define NL80211_KCK_LEN      16
+#define NL80211_KEK_LEN      16
+#define NL80211_REPLAY_CTR_LEN    8
+
+/**
+ * enum nl80211_rekey_data - attributes for GTK rekey offload
+ * @__NL80211_REKEY_DATA_INVALID: invalid number for nested attributes
+ * @NL80211_REKEY_DATA_KEK: key encryption key (binary)
+ * @NL80211_REKEY_DATA_KCK: key confirmation key (binary)
+ * @NL80211_REKEY_DATA_REPLAY_CTR: replay counter (binary)
+ * @NUM_NL80211_REKEY_DATA: number of rekey attributes (internal)
+ * @MAX_NL80211_REKEY_DATA: highest rekey attribute (internal)
+ */
+enum nl80211_rekey_data {
+  __NL80211_REKEY_DATA_INVALID,
+  NL80211_REKEY_DATA_KEK,
+  NL80211_REKEY_DATA_KCK,
+  NL80211_REKEY_DATA_REPLAY_CTR,
+
+  /* keep last */
+  NUM_NL80211_REKEY_DATA,
+  MAX_NL80211_REKEY_DATA = NUM_NL80211_REKEY_DATA - 1
+}; 
+
+/**
+ * enum nl80211_hidden_ssid - values for %NL80211_ATTR_HIDDEN_SSID
+ * @NL80211_HIDDEN_SSID_NOT_IN_USE: do not hide SSID (i.e., broadcast it in
+ *  Beacon frames)
+ * @NL80211_HIDDEN_SSID_ZERO_LEN: hide SSID by using zero-length SSID element
+ *  in Beacon frames
+ * @NL80211_HIDDEN_SSID_ZERO_CONTENTS: hide SSID by using correct length of SSID
+ *  element in Beacon frames but zero out each byte in the SSID
+ */
+enum nl80211_hidden_ssid {
+  NL80211_HIDDEN_SSID_NOT_IN_USE,
+  NL80211_HIDDEN_SSID_ZERO_LEN,
+  NL80211_HIDDEN_SSID_ZERO_CONTENTS
+};
+
+/**
+ * enum nl80211_sta_wme_attr - station WME attributes
+ * @__NL80211_STA_WME_INVALID: invalid number for nested attribute
+ * @NL80211_STA_WME_UAPSD_QUEUES: bitmap of uapsd queues. the format
+ *  is the same as the AC bitmap in the QoS info field.
+ * @NL80211_STA_WME_MAX_SP: max service period. the format is the same
+ *  as the MAX_SP field in the QoS info field (but already shifted down).
+ * @__NL80211_STA_WME_AFTER_LAST: internal
+ * @NL80211_STA_WME_MAX: highest station WME attribute
+ */
+enum nl80211_sta_wme_attr {
+  __NL80211_STA_WME_INVALID,
+  NL80211_STA_WME_UAPSD_QUEUES,
+  NL80211_STA_WME_MAX_SP,
+
+  /* keep last */
+  __NL80211_STA_WME_AFTER_LAST,
+  NL80211_STA_WME_MAX = __NL80211_STA_WME_AFTER_LAST - 1
+};
+
+/**
+ * enum nl80211_pmksa_candidate_attr - attributes for PMKSA caching candidates
+ * @__NL80211_PMKSA_CANDIDATE_INVALID: invalid number for nested attributes
+ * @NL80211_PMKSA_CANDIDATE_INDEX: candidate index (u32; the smaller, the higher
+ *  priority)
+ * @NL80211_PMKSA_CANDIDATE_BSSID: candidate BSSID (6 octets)
+ * @NL80211_PMKSA_CANDIDATE_PREAUTH: RSN pre-authentication supported (flag)
+ * @NUM_NL80211_PMKSA_CANDIDATE: number of PMKSA caching candidate attributes
+ *  (internal)
+ * @MAX_NL80211_PMKSA_CANDIDATE: highest PMKSA caching candidate attribute
+ *  (internal)
+ */
+enum nl80211_pmksa_candidate_attr {
+  __NL80211_PMKSA_CANDIDATE_INVALID,
+  NL80211_PMKSA_CANDIDATE_INDEX,
+  NL80211_PMKSA_CANDIDATE_BSSID,
+  NL80211_PMKSA_CANDIDATE_PREAUTH,
+
+  /* keep last */
+  NUM_NL80211_PMKSA_CANDIDATE,
+  MAX_NL80211_PMKSA_CANDIDATE = NUM_NL80211_PMKSA_CANDIDATE - 1
+};
+
+/**
+ * enum nl80211_tdls_operation - values for %NL80211_ATTR_TDLS_OPERATION
+ * @NL80211_TDLS_DISCOVERY_REQ: Send a TDLS discovery request
+ * @NL80211_TDLS_SETUP: Setup TDLS link
+ * @NL80211_TDLS_TEARDOWN: Teardown a TDLS link which is already established
+ * @NL80211_TDLS_ENABLE_LINK: Enable TDLS link
+ * @NL80211_TDLS_DISABLE_LINK: Disable TDLS link
+ */
+enum nl80211_tdls_operation {
+  NL80211_TDLS_DISCOVERY_REQ,
+  NL80211_TDLS_SETUP,
+  NL80211_TDLS_TEARDOWN,
+  NL80211_TDLS_ENABLE_LINK,
+  NL80211_TDLS_DISABLE_LINK,
+};
+
+/*
+ * enum nl80211_ap_sme_features - device-integrated AP features
+ * Reserved for future use, no bits are defined in
+ * NL80211_ATTR_DEVICE_AP_SME yet.
+enum nl80211_ap_sme_features {
+};
+ */ 
 
 #endif /* __LINUX_NL80211_H */

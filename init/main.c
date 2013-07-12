@@ -739,7 +739,7 @@ static struct boot_trace_ret ret;
 int do_one_initcall(initcall_t fn)
 {
 	int count = preempt_count();
-	ktime_t calltime, delta, rettime;
+	ktime_t calltime = { .tv64 = 0 }, delta, rettime;
 
 	if (initcall_debug) {
 		call.caller = task_pid_nr(current);
@@ -804,7 +804,7 @@ static void __init do_initcalls(void)
  */
 static void __init do_basic_setup(void)
 {
-	init_workqueues();
+//	init_workqueues();
 	cpuset_init_smp();
 	usermodehelper_init();
 	init_tmpfs();
