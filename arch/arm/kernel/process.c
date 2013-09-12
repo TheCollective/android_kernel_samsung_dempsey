@@ -29,17 +29,17 @@
 #include <linux/utsname.h>
 #include <linux/uaccess.h>
 
+#include <asm/cacheflush.h>
+#include <mach/regs-clock.h>
+
 #include <asm/leds.h>
+#include <asm/cacheflush.h>
 #include <asm/processor.h>
 #include <asm/system.h>
 #include <asm/thread_notify.h>
 #include <asm/stacktrace.h>
 #include <asm/mach/time.h>
 
-#ifdef CONFIG_KERNEL_DEBUG_SEC
-#include <linux/kernel_sec_common.h>
-struct pt_regs kernel_sec_core_ureg_dump;
-#endif
 
 static const char *processor_modes[] = {
   "USER_26", "FIQ_26" , "IRQ_26" , "SVC_26" , "UK4_26" , "UK5_26" , "UK6_26" , "UK7_26" ,
@@ -89,10 +89,9 @@ __setup("hlt", hlt_setup);
 
 void arm_machine_restart(char mode, const char *cmd)
 {
-	/*
-	 * Clean and disable cache, and turn off interrupts
-	 */
-	cpu_proc_fin();
+	/* Disable interrupts first */
+	local_irq_disable();
+	local_fiq_disable();
 
 	/*
 	 * Tell the mm system that we are going to reboot -
@@ -101,13 +100,16 @@ void arm_machine_restart(char mode, const char *cmd)
 	 */
 	setup_mm_for_reboot(mode);
 
-#if 1
-#ifdef CONFIG_KERNEL_DEBUG_SEC
-	/* Clear the magic number because it's normal reboot */
-	kernel_sec_clear_upload_magic_number();
-#endif
 	writel(0x12345678, S5P_INFORM5);  /* Reset */
-#endif
+
+	/* Clean and invalidate caches */
+	flush_cache_all();
+
+	/* Turn off caching */
+	cpu_proc_fin();
+
+	/* Push out any further dirty data, and ensure cache is empty */
+	flush_cache_all();
 
 	/*
 	 * Now call the architecture specific reboot code.
@@ -159,10 +161,9 @@ void cpu_idle(void)
 
 	/* endless idle loop with no priority at all */
 	while (1) {
-		tick_nohz_stop_sched_tick(1);
-		leds_event(led_idle_start);
-		idle_notifier_call_chain(IDLE_START);
 		while (!need_resched()) {
+		idle_notifier_call_chain(IDLE_START);
+		tick_nohz_stop_sched_tick(1);
 #ifdef CONFIG_HOTPLUG_CPU
 			if (cpu_is_offline(smp_processor_id()))
 				cpu_die();
@@ -185,9 +186,8 @@ void cpu_idle(void)
 				local_irq_enable();
 			}
 		}
-		leds_event(led_idle_end);
-		idle_notifier_call_chain(IDLE_END);
 		tick_nohz_restart_sched_tick();
+		idle_notifier_call_chain(IDLE_END);
 		preempt_enable_no_resched();
 		schedule();
 		preempt_disable();
@@ -315,16 +315,7 @@ void __show_regs(struct pt_regs *regs)
 		regs->ARM_r5, regs->ARM_r4);
 	printk("r3 : %08lx  r2 : %08lx  r1 : %08lx  r0 : %08lx\n",
 		regs->ARM_r3, regs->ARM_r2,
-		regs->ARM_r1, regs->ARM_r0);
-
-#ifdef CONFIG_KERNEL_DEBUG_SEC	
-	/*
-	 *  Overwrite SVC context which the error just occurs from regs
-	 * (tkHWANG)
-	 */
-	memcpy((void*)&kernel_sec_core_ureg_dump, (void*)(regs),
-			sizeof(kernel_sec_core_ureg_dump));
-#endif		
+		regs->ARM_r1, regs->ARM_r0);		
 	
 	flags = regs->ARM_cpsr;
 	buf[0] = flags & PSR_N_BIT ? 'N' : 'n';

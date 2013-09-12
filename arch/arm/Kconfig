@@ -1110,19 +1110,6 @@ source "drivers/pcmcia/Kconfig"
 
 endmenu
 
-menu "Samsung Kernel Debug Features"
-
-choice
-        prompt "Enable Samsung Kernel Debug Features"
-        default KERNEL_DEBUG_SEC
-
-config KERNEL_DEBUG_SEC
-        bool "KERNEL_DEBUG_SEC"
-
-endchoice
-
-endmenu
-
 menu "Kernel Features"
 
 source "kernel/time/Kconfig"
@@ -1526,6 +1513,16 @@ config ATAGS_PROC
 	help
 	  Should the atags used to boot the kernel be exported in an "atags"
 	  file in procfs. Useful with kexec.
+
+config AUTO_ZRELADDR
+	bool "Auto calculation of the decompressed kernel image address"
+	depends on !ZBOOT_ROM && !ARCH_U300
+	help
+	  ZRELADDR is the physical address where the decompressed kernel
+	  image will be placed. If AUTO_ZRELADDR is selected, the address
+	  will be determined at run-time by masking the current IP with
+	  0xf8000000. This assumes the zImage being placed in the first 128MB
+	  from start of memory.
 
 endmenu
 
