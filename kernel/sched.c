@@ -1267,6 +1267,37 @@ static void sched_avg_update(struct rq *rq)
 	}
 }
 
+/*
+ * This routine returns the cpu which is non-idle. If the local CPU isn't idle
+ * OR all cpus are idle, local cpu is returned back. If local cpu is idle, then
+ * we must look for another CPU which isn't idle.
+ */
+int sched_select_non_idle_cpu(void)
+{
+  struct sched_domain *sd;
+  int cpu = smp_processor_id();
+  int i;
+
+  /* If Current cpu isn't idle, don't migrate anything */
+  if (!idle_cpu(cpu))
+    return cpu;
+
+  rcu_read_lock();
+  for_each_domain(cpu, sd) {
+    for_each_cpu(i, sched_domain_span(sd)) {
+      if (i == cpu)
+        continue;
+      if (!idle_cpu(i)) {
+        cpu = i;
+        goto unlock;
+      }
+    }
+  }
+unlock:
+  rcu_read_unlock();
+  return cpu;
+} 
+
 static void sched_rt_avg_update(struct rq *rq, u64 rt_delta)
 {
 	rq->rt_avg += rt_delta;
@@ -3953,11 +3984,32 @@ EXPORT_SYMBOL(schedule);
  */
 int mutex_spin_on_owner(struct mutex *lock, struct thread_info *owner)
 {
+	unsigned int nrun;
 	unsigned int cpu;
 	struct rq *rq;
 
 	if (!sched_feat(OWNER_SPIN))
 		return 0;
+
+  /*
+   * Mutex spinning should be temporarily disabled if the load on
+   * the current CPU is high. The load is considered high if there
+   * are 2 or more active tasks waiting to run on this CPU. On the
+   * other hand, if there is another task waiting and the global
+   * load (calc_load_tasks - including uninterruptible tasks) is
+   * bigger than 2X the # of CPUs available, it is also considered
+   * to be high load.
+   */
+  nrun = this_rq()->nr_running;
+  if (nrun >= 3)
+    return 0;
+  else if (nrun == 2) {
+    long active = atomic_long_read(&calc_load_tasks);
+    int  ncpu   = num_online_cpus();
+
+    if (active > 2*ncpu)
+      return 0;
+  }
 
 #ifdef CONFIG_DEBUG_PAGEALLOC
 	/*
@@ -4769,7 +4821,7 @@ recheck:
 	}
 
 	if (user) {
-		retval = security_task_setscheduler(p, policy, param);
+		retval = security_task_setscheduler(p);
 		if (retval)
 			return retval;
 	}
@@ -5011,7 +5063,7 @@ long sched_setaffinity(pid_t pid, const struct cpumask *in_mask)
 	if (!check_same_owner(p) && !capable(CAP_SYS_NICE))
 		goto out_unlock;
 
-	retval = security_task_setscheduler(p, 0, NULL);
+	retval = security_task_setscheduler(p);
 	if (retval)
 		goto out_unlock;
 

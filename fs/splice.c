@@ -31,6 +31,7 @@
 #include <linux/uio.h>
 #include <linux/security.h>
 #include <linux/gfp.h>
+#include <linux/socket.h>
 
 /*
  * Attempt to steal a page from a pipe buffer. This should perhaps go into
@@ -162,6 +163,14 @@ static const struct pipe_buf_operations user_page_pipe_buf_ops = {
 	.get = generic_pipe_buf_get,
 };
 
+static void wakeup_pipe_readers(struct pipe_inode_info *pipe)
+{
+	smp_mb();
+	if (waitqueue_active(&pipe->wait))
+		wake_up_interruptible(&pipe->wait);
+	kill_fasync(&pipe->fasync_readers, SIGIO, POLL_IN);
+}
+
 /**
  * splice_to_pipe - fill passed data into a pipe
  * @pipe:	pipe to fill
@@ -247,12 +256,8 @@ ssize_t splice_to_pipe(struct pipe_inode_info *pipe,
 
 	pipe_unlock(pipe);
 
-	if (do_wakeup) {
-		smp_mb();
-		if (waitqueue_active(&pipe->wait))
-			wake_up_interruptible(&pipe->wait);
-		kill_fasync(&pipe->fasync_readers, SIGIO, POLL_IN);
-	}
+	if (do_wakeup)
+		wakeup_pipe_readers(pipe);
 
 	while (page_nr < spd_pages)
 		spd->spd_release(spd, page_nr++);
@@ -399,17 +404,7 @@ __generic_file_splice_read(struct file *in, loff_t *ppos,
 		 * If the page isn't uptodate, we may need to start io on it
 		 */
 		if (!PageUptodate(page)) {
-			/*
-			 * If in nonblock mode then dont block on waiting
-			 * for an in-flight io page
-			 */
-			if (flags & SPLICE_F_NONBLOCK) {
-				if (!trylock_page(page)) {
-					error = -EAGAIN;
-					break;
-				}
-			} else
-				lock_page(page);
+			lock_page(page);
 
 			/*
 			 * Page was truncated, or invalidated by the
@@ -694,19 +689,16 @@ static int pipe_to_sendpage(struct pipe_inode_info *pipe,
 {
 	struct file *file = sd->u.file;
 	loff_t pos = sd->pos;
-	int ret, more;
+	int more;
 
-	ret = buf->ops->confirm(pipe, buf);
-	if (!ret) {
-		more = (sd->flags & SPLICE_F_MORE) || sd->len < sd->total_len;
-		if (file->f_op && file->f_op->sendpage)
-			ret = file->f_op->sendpage(file, buf->page, buf->offset,
-						   sd->len, &pos, more);
-		else
-			ret = -EINVAL;
-	}
+	if (!likely(file->f_op && file->f_op->sendpage))
+		return -EINVAL;
 
-	return ret;
+	more = (sd->flags & SPLICE_F_MORE) ? MSG_MORE : 0;
+	if (sd->len < sd->total_len)
+		more |= MSG_SENDPAGE_NOTLAST;
+	return file->f_op->sendpage(file, buf->page, buf->offset,
+				    sd->len, &pos, more);
 }
 
 /*
@@ -738,13 +730,6 @@ int pipe_to_file(struct pipe_inode_info *pipe, struct pipe_buffer *buf,
 	struct page *page;
 	void *fsdata;
 	int ret;
-
-	/*
-	 * make sure the data in this buffer is uptodate
-	 */
-	ret = buf->ops->confirm(pipe, buf);
-	if (unlikely(ret))
-		return ret;
 
 	offset = sd->pos & ~PAGE_CACHE_MASK;
 
@@ -817,12 +802,17 @@ int splice_from_pipe_feed(struct pipe_inode_info *pipe, struct splice_desc *sd,
 		if (sd->len > sd->total_len)
 			sd->len = sd->total_len;
 
-		ret = actor(pipe, buf, sd);
-		if (ret <= 0) {
+		ret = buf->ops->confirm(pipe, buf);
+		if (unlikely(ret)) {
 			if (ret == -ENODATA)
 				ret = 0;
 			return ret;
 		}
+
+		ret = actor(pipe, buf, sd);
+		if (ret <= 0)
+			return ret;
+
 		buf->offset += ret;
 		buf->len -= ret;
 
@@ -1055,10 +1045,6 @@ static int write_pipe_buf(struct pipe_inode_info *pipe, struct pipe_buffer *buf,
 {
 	int ret;
 	void *data;
-
-	ret = buf->ops->confirm(pipe, buf);
-	if (ret)
-		return ret;
 
 	data = buf->ops->map(pipe, buf, 0);
 	ret = kernel_write(sd->u.file, data + buf->offset, sd->len, sd->pos);
@@ -1507,10 +1493,6 @@ static int pipe_to_user(struct pipe_inode_info *pipe, struct pipe_buffer *buf,
 	char *src;
 	int ret;
 
-	ret = buf->ops->confirm(pipe, buf);
-	if (unlikely(ret))
-		return ret;
-
 	/*
 	 * See if we can use the atomic maps, by prefaulting in the
 	 * pages and doing an atomic copy
@@ -1919,12 +1901,9 @@ retry:
 	/*
 	 * If we put data in the output pipe, wakeup any potential readers.
 	 */
-	if (ret > 0) {
-		smp_mb();
-		if (waitqueue_active(&opipe->wait))
-			wake_up_interruptible(&opipe->wait);
-		kill_fasync(&opipe->fasync_readers, SIGIO, POLL_IN);
-	}
+	if (ret > 0)
+		wakeup_pipe_readers(opipe);
+
 	if (input_wakeup)
 		wakeup_pipe_writers(ipipe);
 
@@ -2003,12 +1982,8 @@ static int link_pipe(struct pipe_inode_info *ipipe,
 	/*
 	 * If we put data in the output pipe, wakeup any potential readers.
 	 */
-	if (ret > 0) {
-		smp_mb();
-		if (waitqueue_active(&opipe->wait))
-			wake_up_interruptible(&opipe->wait);
-		kill_fasync(&opipe->fasync_readers, SIGIO, POLL_IN);
-	}
+	if (ret > 0)
+		wakeup_pipe_readers(opipe);
 
 	return ret;
 }

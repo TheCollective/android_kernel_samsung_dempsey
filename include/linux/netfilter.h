@@ -13,6 +13,7 @@
 #endif
 #include <linux/types.h>
 #include <linux/compiler.h>
+#include <linux/sysctl.h>
 
 /* Responses from hook functions. */
 #define NF_DROP 0
@@ -215,7 +216,7 @@ NF_HOOK_COND(uint8_t pf, unsigned int hook, struct sk_buff *skb,
 	int ret;
 
 	if (!cond ||
-	    (ret = nf_hook_thresh(pf, hook, skb, in, out, okfn, INT_MIN) == 1))
+	    ((ret = nf_hook_thresh(pf, hook, skb, in, out, okfn, INT_MIN)) == 1))
 		ret = okfn(skb);
 	return ret;
 }
@@ -268,7 +269,7 @@ struct nf_afinfo {
 extern const struct nf_afinfo *nf_afinfo[NFPROTO_NUMPROTO];
 static inline const struct nf_afinfo *nf_get_afinfo(unsigned short family)
 {
-	return rcu_dereference(nf_afinfo[family]);
+return rcu_dereference(nf_afinfo[family]);
 }
 
 static inline __sum16

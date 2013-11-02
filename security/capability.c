@@ -12,6 +12,26 @@
 
 #include <linux/security.h>
 
+static int cap_binder_set_context_mgr(struct task_struct *mgr)
+{
+	return 0;
+}
+
+static int cap_binder_transaction(struct task_struct *from, struct task_struct *to)
+{
+	return 0;
+}
+
+static int cap_binder_transfer_binder(struct task_struct *from, struct task_struct *to)
+{
+	return 0;
+}
+
+static int cap_binder_transfer_file(struct task_struct *from, struct task_struct *to, struct file *file)
+{
+	return 0;
+}
+
 static int cap_sysctl(ctl_table *table, int op)
 {
 	return 0;
@@ -412,7 +432,8 @@ static int cap_task_getioprio(struct task_struct *p)
 	return 0;
 }
 
-static int cap_task_setrlimit(unsigned int resource, struct rlimit *new_rlim)
+static int cap_task_setrlimit(struct task_struct *p, unsigned int resource,
+		struct rlimit *new_rlim)
 {
 	return 0;
 }
@@ -543,7 +564,7 @@ static int cap_sem_semop(struct sem_array *sma, struct sembuf *sops,
 }
 
 #ifdef CONFIG_SECURITY_NETWORK
-static int cap_unix_stream_connect(struct socket *sock, struct socket *other,
+static int cap_unix_stream_connect(struct sock *sock, struct sock *other,
 				   struct sock *newsk)
 {
 	return 0;
@@ -677,7 +698,18 @@ static void cap_inet_conn_established(struct sock *sk, struct sk_buff *skb)
 {
 }
 
+static int cap_secmark_relabel_packet(u32 secid)
+{
+	return 0;
+}
 
+static void cap_secmark_refcount_inc(void)
+{
+}
+
+static void cap_secmark_refcount_dec(void)
+{
+}
 
 static void cap_req_classify_flow(const struct request_sock *req,
 				  struct flowi *fl)
@@ -744,7 +776,7 @@ static int cap_xfrm_policy_lookup(struct xfrm_sec_ctx *ctx, u32 sk_sid, u8 dir)
 
 static int cap_xfrm_state_pol_flow_match(struct xfrm_state *x,
 					 struct xfrm_policy *xp,
-					 struct flowi *fl)
+					 const struct flowi *fl)
 {
 	return 1;
 }
@@ -777,7 +809,8 @@ static int cap_secid_to_secctx(u32 secid, char **secdata, u32 *seclen)
 
 static int cap_secctx_to_secid(const char *secdata, u32 seclen, u32 *secid)
 {
-	return -EOPNOTSUPP;
+	*secid = 0;
+	return 0;
 }
 
 static void cap_release_secctx(char *secdata, u32 seclen)
@@ -856,6 +889,10 @@ static void cap_audit_rule_free(void *lsmrule)
 
 void __init security_fixup_ops(struct security_operations *ops)
 {
+	set_to_cap_if_null(ops, binder_set_context_mgr);
+	set_to_cap_if_null(ops, binder_transaction);
+	set_to_cap_if_null(ops, binder_transfer_binder);
+	set_to_cap_if_null(ops, binder_transfer_file);
 	set_to_cap_if_null(ops, ptrace_access_check);
 	set_to_cap_if_null(ops, ptrace_traceme);
 	set_to_cap_if_null(ops, capget);
@@ -1018,6 +1055,9 @@ void __init security_fixup_ops(struct security_operations *ops)
 	set_to_cap_if_null(ops, inet_conn_request);
 	set_to_cap_if_null(ops, inet_csk_clone);
 	set_to_cap_if_null(ops, inet_conn_established);
+	set_to_cap_if_null(ops, secmark_relabel_packet);
+	set_to_cap_if_null(ops, secmark_refcount_inc);
+	set_to_cap_if_null(ops, secmark_refcount_dec);
 	set_to_cap_if_null(ops, req_classify_flow);
 	set_to_cap_if_null(ops, tun_dev_create);
 	set_to_cap_if_null(ops, tun_dev_post_create);

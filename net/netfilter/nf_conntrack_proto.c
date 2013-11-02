@@ -294,7 +294,7 @@ int nf_conntrack_l4proto_register(struct nf_conntrack_l4proto *l4proto)
 			proto_array[i] = &nf_conntrack_l4proto_generic;
 		nf_ct_protos[l4proto->l3proto] = proto_array;
 	} else if (nf_ct_protos[l4proto->l3proto][l4proto->l4proto] !=
-					&nf_conntrack_l4proto_generic) {
+	 	       &nf_conntrack_l4proto_generic) {
 		ret = -EBUSY;
 		goto out_unlock;
 	}

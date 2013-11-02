@@ -45,10 +45,10 @@ dir /lvm/etc 755 0 0
 dir /lvm/sbin 755 0 0
 file /lvm/etc/lvm.conf source/usr/infuse4g_initramfs_files/lvm.conf 755 0 0
 file /lvm/sbin/lvm source/usr/infuse4g_initramfs_files/lvm 755 0 0
-file /stage1/busybox source/usr/infuse4g_initramfs_files/busybox 755 0 0
+file /stage1/busybox ../../utilities/busybox 755 0 0
 file /stage1/init source/usr/infuse4g_initramfs_files/init 755 0 0
-file /stage1/erase_image source/usr/infuse4g_initramfs_files/erase_image 755 0 0
-file /stage1/make_ext4fs source/usr/infuse4g_initramfs_files/make_ext4fs 755 0 0
+file /stage1/erase_image ../../utilities/erase_image 755 0 0
+file /stage1/make_ext4fs ../../utilities/make_ext4fs 755 0 0
 file /stage1/ramdisk.img ../../ramdisk.img 700 0 0
 file /stage1/ramdisk-recovery.img ../../ramdisk-recovery.img 700 0 0
 dir /sys 755 0 0

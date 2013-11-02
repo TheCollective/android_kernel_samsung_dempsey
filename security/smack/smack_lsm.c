@@ -598,6 +598,8 @@ static int smack_inode_rename(struct inode *old_inode,
 static int smack_inode_permission(struct inode *inode, int mask)
 {
 	struct smk_audit_info ad;
+
+	mask &= (MAY_READ|MAY_WRITE|MAY_EXEC|MAY_APPEND);
 	/*
 	 * No permission to check. Existence test. Yup, it's there.
 	 */
@@ -1279,12 +1281,11 @@ static int smack_task_getioprio(struct task_struct *p)
  *
  * Return 0 if read access is permitted
  */
-static int smack_task_setscheduler(struct task_struct *p, int policy,
-				   struct sched_param *lp)
+static int smack_task_setscheduler(struct task_struct *p)
 {
 	int rc;
 
-	rc = cap_task_setscheduler(p, policy, lp);
+	rc = cap_task_setscheduler(p);
 	if (rc == 0)
 		rc = smk_curacc_on_task(p, MAY_WRITE);
 	return rc;
@@ -2421,22 +2422,22 @@ static int smack_setprocattr(struct task_struct *p, char *name,
 
 /**
  * smack_unix_stream_connect - Smack access on UDS
- * @sock: one socket
- * @other: the other socket
+ * @sock: one sock
+ * @other: the other sock
  * @newsk: unused
  *
  * Return 0 if a subject with the smack of sock could access
  * an object with the smack of other, otherwise an error code
  */
-static int smack_unix_stream_connect(struct socket *sock,
-				     struct socket *other, struct sock *newsk)
+static int smack_unix_stream_connect(struct sock *sock,
+				     struct sock *other, struct sock *newsk)
 {
-	struct inode *sp = SOCK_INODE(sock);
-	struct inode *op = SOCK_INODE(other);
+	struct inode *sp = SOCK_INODE(sock->sk_socket);
+	struct inode *op = SOCK_INODE(other->sk_socket);
 	struct smk_audit_info ad;
 
 	smk_ad_init(&ad, __func__, LSM_AUDIT_DATA_NET);
-	smk_ad_setfield_u_net_sk(&ad, other->sk);
+	smk_ad_setfield_u_net_sk(&ad, other);
 	return smk_access(smk_of_inode(sp), smk_of_inode(op),
 				 MAY_READWRITE, &ad);
 }
@@ -3013,7 +3014,8 @@ static int smack_secid_to_secctx(u32 secid, char **secdata, u32 *seclen)
 {
 	char *sp = smack_from_secid(secid);
 
-	*secdata = sp;
+	if (secdata)
+		*secdata = sp;
 	*seclen = strlen(sp);
 	return 0;
 }

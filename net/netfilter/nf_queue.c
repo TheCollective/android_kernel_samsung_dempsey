@@ -49,6 +49,7 @@ EXPORT_SYMBOL(nf_register_queue_handler);
 /* The caller must flush their queue before this */
 int nf_unregister_queue_handler(u_int8_t pf, const struct nf_queue_handler *qh)
 {
+
 	if (pf >= ARRAY_SIZE(queue_handler))
 		return -EINVAL;
 

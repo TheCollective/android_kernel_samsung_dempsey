@@ -14,6 +14,7 @@
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/slab.h>
+#include <linux/pm_runtime.h>
 
 #include <linux/mmc/card.h>
 #include <linux/mmc/host.h>
@@ -115,18 +116,19 @@ static int mmc_bus_remove(struct device *dev)
 	return 0;
 }
 
-static int mmc_bus_suspend(struct device *dev, pm_message_t state)
+static int mmc_bus_pm_suspend(struct device *dev)
 {
 	struct mmc_driver *drv = to_mmc_driver(dev->driver);
 	struct mmc_card *card = dev_to_mmc_card(dev);
 	int ret = 0;
+	pm_message_t state = { PM_EVENT_SUSPEND };
 
 	if (dev->driver && drv->suspend)
 		ret = drv->suspend(card, state);
 	return ret;
 }
 
-static int mmc_bus_resume(struct device *dev)
+static int mmc_bus_pm_resume(struct device *dev)
 {
 	struct mmc_driver *drv = to_mmc_driver(dev->driver);
 	struct mmc_card *card = dev_to_mmc_card(dev);
@@ -137,6 +139,32 @@ static int mmc_bus_resume(struct device *dev)
 	return ret;
 }
 
+#ifdef CONFIG_PM_RUNTIME
+static int mmc_runtime_suspend(struct device *dev)
+{
+	struct mmc_card *card = mmc_dev_to_card(dev);
+
+	return mmc_power_save_host(card->host);
+}
+
+static int mmc_runtime_resume(struct device *dev)
+{
+	struct mmc_card *card = mmc_dev_to_card(dev);
+
+	return mmc_power_restore_host(card->host);
+}
+
+static int mmc_runtime_idle(struct device *dev)
+{
+	return pm_runtime_suspend(dev);
+}
+#endif /* CONFIG_PM_RUNTIME */
+
+static const struct dev_pm_ops mmc_bus_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(mmc_bus_pm_suspend, mmc_bus_pm_resume)
+	SET_RUNTIME_PM_OPS(mmc_runtime_suspend, mmc_runtime_resume, mmc_runtime_idle)
+};
+
 static struct bus_type mmc_bus_type = {
 	.name		= "mmc",
 	.dev_attrs	= mmc_dev_attrs,
@@ -144,8 +172,7 @@ static struct bus_type mmc_bus_type = {
 	.uevent		= mmc_bus_uevent,
 	.probe		= mmc_bus_probe,
 	.remove		= mmc_bus_remove,
-	.suspend	= mmc_bus_suspend,
-	.resume		= mmc_bus_resume,
+	.pm		= &mmc_bus_pm_ops,
 };
 
 int mmc_register_bus(void)

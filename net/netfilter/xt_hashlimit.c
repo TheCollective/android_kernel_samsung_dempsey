@@ -392,8 +392,7 @@ static void htable_put(struct xt_hashlimit_htable *hinfo)
 #define CREDITS_PER_JIFFY POW2_BELOW32(MAX_CPJ)
 
 /* Precision saver. */
-static inline u_int32_t
-user2credits(u_int32_t user)
+static u32 user2credits(u32 user)
 {
 	/* If multiplying would overflow... */
 	if (user > 0xFFFFFFFF / (HZ*CREDITS_PER_JIFFY))
@@ -403,7 +402,7 @@ user2credits(u_int32_t user)
 	return (user * HZ * CREDITS_PER_JIFFY) / XT_HASHLIMIT_SCALE;
 }
 
-static inline void rateinfo_recalc(struct dsthash_ent *dh, unsigned long now)
+static void rateinfo_recalc(struct dsthash_ent *dh, unsigned long now)
 {
 	dh->rateinfo.credit += (now - dh->rateinfo.prev) * CREDITS_PER_JIFFY;
 	if (dh->rateinfo.credit > dh->rateinfo.credit_cap)
@@ -493,12 +492,12 @@ hashlimit_init_dst(const struct xt_hashlimit_htable *hinfo,
 	}
 
 	switch (nexthdr) {
-	case IPPROTO_TCP:
-	case IPPROTO_UDP:
-	case IPPROTO_UDPLITE:
-	case IPPROTO_SCTP:
-	case IPPROTO_DCCP:
-		ports = skb_header_pointer(skb, protoff, sizeof(_ports),
+	  case IPPROTO_TCP:
+	  case IPPROTO_UDP:
+	  case IPPROTO_UDPLITE:
+	  case IPPROTO_SCTP:
+	  case IPPROTO_DCCP:
+	    ports = skb_header_pointer(skb, protoff, sizeof(_ports),
 					   &_ports);
 		break;
 	default:
@@ -539,8 +538,7 @@ hashlimit_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		dh->rateinfo.prev = jiffies;
 		dh->rateinfo.credit = user2credits(hinfo->cfg.avg *
 		                      hinfo->cfg.burst);
-		dh->rateinfo.credit_cap = user2credits(hinfo->cfg.avg *
-		                          hinfo->cfg.burst);
+		dh->rateinfo.credit_cap = dh->rateinfo.credit;
 		dh->rateinfo.cost = user2credits(hinfo->cfg.avg);
 	} else {
 		/* update expiration timeout */
